@@ -45,9 +45,8 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       setUploadError(`${filesToUpload.length - imageFiles.length} non-image files were skipped`);
     }
 
-    console.log('Starting upload for', imageFiles.length, 'images');
-
     try {
+      console.log('Starting upload of', imageFiles.length, 'images');
       const { urls, errors } = await uploadMultipleImages(imageFiles);
       
       if (errors.length > 0) {
@@ -67,7 +66,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       }
     } catch (error) {
       console.error('Error uploading images:', error);
-      setUploadError('Upload failed. Please check your connection and try again.');
+      setUploadError('Upload failed. Please try again.');
     }
   };
 
@@ -193,9 +192,16 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         </button>
       </div>
 
-      <p className="text-sm text-gray-500 mt-2">
-        Upload up to {maxImages} images (JPG, PNG, WebP, GIF). Max 10MB per image.
-      </p>
+      <div className="mt-2 space-y-1">
+        <p className="text-sm text-gray-500">
+          Upload up to {maxImages} images. Supported formats: JPG, PNG, WebP, GIF (max 10MB each)
+        </p>
+        {images.length === 0 && (
+          <p className="text-sm text-orange-600">
+            ⚠️ At least one image is required to create a listing
+          </p>
+        )}
+      </div>
     </div>
   );
 };

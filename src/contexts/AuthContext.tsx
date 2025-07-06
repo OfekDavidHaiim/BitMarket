@@ -63,27 +63,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const loadProfile = async (userId: string) => {
     try {
-      console.log('Loading profile for user:', userId);
-      
+      // Use maybeSingle() instead of single() to handle "no rows found" gracefully
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle(); // Use maybeSingle() instead of single() to handle no rows gracefully
+        .maybeSingle();
 
       if (error) {
         console.error('Error loading profile:', error);
-        setProfile(null);
+        // Don't throw error for missing profile, just log it
       } else if (data) {
-        console.log('Profile loaded successfully:', data);
         setProfile(data);
       } else {
         console.log('No profile found for user:', userId);
-        setProfile(null);
+        // Profile doesn't exist yet, this is normal for new users
       }
     } catch (error) {
-      console.error('Unexpected error loading profile:', error);
-      setProfile(null);
+      console.error('Error loading profile:', error);
     } finally {
       setLoading(false);
     }

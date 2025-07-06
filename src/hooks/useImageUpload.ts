@@ -19,11 +19,17 @@ export const useImageUpload = () => {
       }
 
       const fileExt = file.name.split('.').pop()?.toLowerCase();
+      if (!fileExt || !['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(fileExt)) {
+        throw new Error('Unsupported file format. Please use JPG, PNG, WebP, or GIF');
+      }
+
+      // Create unique filename
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = fileName; // Simple flat structure
+      const filePath = fileName;
 
       console.log('Uploading file:', fileName, 'Size:', file.size, 'Type:', file.type);
 
+      // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(filePath, file, {
@@ -32,42 +38,45 @@ export const useImageUpload = () => {
         });
 
       if (error) {
-        console.error('Upload error:', error);
+        console.error('Storage upload error:', error);
         
+        // Handle specific error cases
         if (error.message.includes('Bucket not found')) {
           throw new Error('Storage bucket not configured. Please contact support.');
-        }
-        
-        if (error.message.includes('Duplicate')) {
+        } else if (error.message.includes('Duplicate')) {
           throw new Error('File already exists. Please try again.');
+        } else {
+          throw new Error(`Upload failed: ${error.message}`);
         }
-        
-        throw new Error(`Upload failed: ${error.message}`);
       }
 
-      console.log('Upload successful:', data);
+      if (!data?.path) {
+        throw new Error('Upload completed but no file path returned');
+      }
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from(bucket)
-        .getPublicUrl(filePath);
+        .getPublicUrl(data.path);
 
-      console.log('Public URL:', publicUrl);
+      if (!publicUrl) {
+        throw new Error('Failed to get public URL for uploaded image');
+      }
 
+      console.log('Upload successful:', publicUrl);
       return { url: publicUrl, error: null };
+
     } catch (err) {
       console.error('Error uploading image:', err);
-      return { 
-        url: null, 
-        error: err instanceof Error ? err.message : 'Failed to upload image' 
-      };
+      const errorMessage = err instanceof Error ? err.message : 'Failed to upload image';
+      return { url: null, error: errorMessage };
     } finally {
       setUploading(false);
     }
   };
 
   const uploadMultipleImages = async (files: File[], bucket: string = 'product-images') => {
-    console.log('Uploading multiple images:', files.length);
+    console.log('Starting multiple image upload:', files.length, 'files');
     
     const results = await Promise.all(
       files.map(file => uploadImage(file, bucket))
@@ -81,8 +90,8 @@ export const useImageUpload = () => {
       .filter(result => result.error)
       .map(result => result.error!);
 
-    console.log('Upload results - URLs:', urls.length, 'Errors:', errors.length);
-
+    console.log('Upload results:', { urls: urls.length, errors: errors.length });
+    
     return { urls, errors };
   };
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
 import { useImageUpload } from '../hooks/useImageUpload';
 
 interface ImageUploadProps {
@@ -16,40 +16,58 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   className = '' 
 }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploading, uploadMultipleImages } = useImageUpload();
 
   const handleFileSelect = async (files: FileList | null) => {
     if (!files || uploading) return;
 
+    setUploadError(null);
     const fileArray = Array.from(files);
     const remainingSlots = maxImages - images.length;
     const filesToUpload = fileArray.slice(0, remainingSlots);
 
-    if (filesToUpload.length === 0) return;
+    if (filesToUpload.length === 0) {
+      setUploadError(`Maximum ${maxImages} images allowed`);
+      return;
+    }
 
     // Filter for image files only
     const imageFiles = filesToUpload.filter(file => file.type.startsWith('image/'));
     
     if (imageFiles.length === 0) {
-      alert('Please select only image files');
+      setUploadError('Please select only image files (JPG, PNG, WebP, GIF)');
       return;
     }
+
+    if (imageFiles.length !== filesToUpload.length) {
+      setUploadError(`${filesToUpload.length - imageFiles.length} non-image files were skipped`);
+    }
+
+    console.log('Starting upload for', imageFiles.length, 'images');
 
     try {
       const { urls, errors } = await uploadMultipleImages(imageFiles);
       
       if (errors.length > 0) {
         console.error('Upload errors:', errors);
-        alert(`Failed to upload ${errors.length} image(s)`);
+        setUploadError(`Failed to upload ${errors.length} image(s): ${errors[0]}`);
       }
 
       if (urls.length > 0) {
+        console.log('Successfully uploaded', urls.length, 'images');
         onImagesChange([...images, ...urls]);
+        
+        if (errors.length === 0) {
+          setUploadError(null);
+        }
+      } else if (errors.length > 0) {
+        setUploadError('All uploads failed. Please try again.');
       }
     } catch (error) {
       console.error('Error uploading images:', error);
-      alert('Failed to upload images');
+      setUploadError('Upload failed. Please check your connection and try again.');
     }
   };
 
@@ -72,6 +90,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
   const removeImage = (index: number) => {
     const newImages = images.filter((_, i) => i !== index);
     onImagesChange(newImages);
+    setUploadError(null);
   };
 
   return (
@@ -79,6 +98,16 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       <label className="block text-sm font-medium text-gray-700 mb-3">
         Product Images ({images.length}/{maxImages})
       </label>
+      
+      {/* Error Display */}
+      {uploadError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
+          <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm text-red-700">{uploadError}</p>
+          </div>
+        </div>
+      )}
       
       {/* Image Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
@@ -88,6 +117,10 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               src={image} 
               alt={`Product ${index + 1}`} 
               className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Image load error:', image);
+                e.currentTarget.src = 'https://images.pexels.com/photos/18105/pexels-photo.jpg?auto=compress&cs=tinysrgb&w=500&h=300&fit=crop';
+              }}
             />
             <button
               type="button"
@@ -161,7 +194,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
       </div>
 
       <p className="text-sm text-gray-500 mt-2">
-        Upload up to {maxImages} images. Images will be stored securely in Supabase Storage.
+        Upload up to {maxImages} images (JPG, PNG, WebP, GIF). Max 10MB per image.
       </p>
     </div>
   );

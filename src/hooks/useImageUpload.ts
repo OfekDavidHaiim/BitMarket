@@ -8,39 +8,51 @@ export const useImageUpload = () => {
     try {
       setUploading(true);
 
-      const fileExt = file.name.split('.').pop();
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        throw new Error('Please select an image file');
+      }
+
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('Image size must be less than 10MB');
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${fileName}`;
+      const filePath = fileName; // Simple flat structure
 
-      // First, check if the bucket exists and create it if it doesn't
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
-      
-      if (listError) {
-        console.error('Error listing buckets:', listError);
-      }
-
-      const bucketExists = buckets?.some(b => b.name === bucket);
-      
-      if (!bucketExists) {
-        console.error(`Storage bucket '${bucket}' not found. Please create it in your Supabase dashboard.`);
-        throw new Error(`Storage bucket '${bucket}' not found. Please create the bucket in your Supabase dashboard and configure appropriate policies.`);
-      }
+      console.log('Uploading file:', fileName, 'Size:', file.size, 'Type:', file.type);
 
       const { data, error } = await supabase.storage
         .from(bucket)
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
       if (error) {
+        console.error('Upload error:', error);
+        
         if (error.message.includes('Bucket not found')) {
-          throw new Error(`Storage bucket '${bucket}' not found. Please create the bucket in your Supabase dashboard and configure appropriate policies.`);
+          throw new Error('Storage bucket not configured. Please contact support.');
         }
-        throw error;
+        
+        if (error.message.includes('Duplicate')) {
+          throw new Error('File already exists. Please try again.');
+        }
+        
+        throw new Error(`Upload failed: ${error.message}`);
       }
+
+      console.log('Upload successful:', data);
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from(bucket)
         .getPublicUrl(filePath);
+
+      console.log('Public URL:', publicUrl);
 
       return { url: publicUrl, error: null };
     } catch (err) {
@@ -55,6 +67,8 @@ export const useImageUpload = () => {
   };
 
   const uploadMultipleImages = async (files: File[], bucket: string = 'product-images') => {
+    console.log('Uploading multiple images:', files.length);
+    
     const results = await Promise.all(
       files.map(file => uploadImage(file, bucket))
     );
@@ -66,6 +80,8 @@ export const useImageUpload = () => {
     const errors = results
       .filter(result => result.error)
       .map(result => result.error!);
+
+    console.log('Upload results - URLs:', urls.length, 'Errors:', errors.length);
 
     return { urls, errors };
   };

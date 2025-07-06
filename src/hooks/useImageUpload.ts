@@ -30,25 +30,43 @@ export const useImageUpload = () => {
         throw new Error('Unsupported file format. Please use JPG, PNG, WebP, or GIF');
       }
 
-      // Create unique filename with user ID prefix for better organization
+      // Create unique filename with user ID prefix for better organization and security
       const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       console.log('Uploading file:', fileName, 'Size:', file.size, 'Type:', file.type);
       console.log('User authenticated:', !!user, 'Session valid:', !!session?.access_token);
 
-      // Upload to Supabase Storage with explicit auth headers
+      // First, check if we can access the storage
+      try {
+        const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+        if (bucketsError) {
+          console.error('Cannot access storage buckets:', bucketsError);
+          throw new Error('Storage access denied. Please check your permissions.');
+        }
+        
+        const productBucket = buckets?.find(b => b.name === bucket);
+        if (!productBucket) {
+          throw new Error(`Storage bucket '${bucket}' not found. Please contact support.`);
+        }
+        
+        console.log('Storage bucket found:', productBucket);
+      } catch (storageError) {
+        console.error('Storage check failed:', storageError);
+        throw new Error('Unable to access storage. Please try again or contact support.');
+      }
+
+      // Upload to Supabase Storage with explicit options
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(fileName, file, {
           cacheControl: '3600',
-          upsert: false,
-          duplex: 'half'
+          upsert: false, // Don't overwrite existing files
         });
 
       if (error) {
         console.error('Storage upload error:', error);
         
-        // Handle specific error cases
+        // Handle specific error cases with user-friendly messages
         if (error.message.includes('row-level security')) {
           throw new Error('Upload permission denied. Please try logging out and back in.');
         } else if (error.message.includes('Bucket not found')) {
@@ -57,6 +75,10 @@ export const useImageUpload = () => {
           throw new Error('File already exists. Please try again.');
         } else if (error.message.includes('Unauthorized') || error.message.includes('403')) {
           throw new Error('Upload not authorized. Please check your login status.');
+        } else if (error.message.includes('413') || error.message.includes('too large')) {
+          throw new Error('File too large. Please use an image smaller than 10MB.');
+        } else if (error.message.includes('415') || error.message.includes('type')) {
+          throw new Error('Invalid file type. Please use JPG, PNG, WebP, or GIF.');
         } else {
           throw new Error(`Upload failed: ${error.message}`);
         }
@@ -115,9 +137,46 @@ export const useImageUpload = () => {
     return { urls, errors };
   };
 
+  // Function to check storage permissions
+  const checkStoragePermissions = async () => {
+    try {
+      if (!user) {
+        return { canUpload: false, error: 'Not authenticated' };
+      }
+
+      // Test storage access
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      if (bucketsError) {
+        return { canUpload: false, error: `Storage access denied: ${bucketsError.message}` };
+      }
+
+      const productBucket = buckets?.find(b => b.name === 'product-images');
+      if (!productBucket) {
+        return { canUpload: false, error: 'Product images bucket not found' };
+      }
+
+      // Test if we can list files (read permission)
+      const { error: listError } = await supabase.storage
+        .from('product-images')
+        .list('', { limit: 1 });
+
+      if (listError) {
+        return { canUpload: false, error: `Storage read test failed: ${listError.message}` };
+      }
+
+      return { canUpload: true, error: null };
+    } catch (error) {
+      return { 
+        canUpload: false, 
+        error: error instanceof Error ? error.message : 'Storage permission check failed' 
+      };
+    }
+  };
+
   return {
     uploading,
     uploadImage,
     uploadMultipleImages,
+    checkStoragePermissions,
   };
 };

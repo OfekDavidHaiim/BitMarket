@@ -49,7 +49,17 @@ export const useChats = () => {
       setChats(chatsWithLastMessage);
     } catch (err) {
       console.error('Error loading chats:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load chats');
+      
+      // Provide more specific error handling
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to fetch')) {
+          setError('Network connection error. Please check your internet connection and try again.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Failed to load chats. Please try again.');
+      }
     } finally {
       setLoading(false);
     }

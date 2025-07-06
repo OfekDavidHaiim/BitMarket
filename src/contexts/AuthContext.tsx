@@ -69,13 +69,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .eq('id', userId)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error loading profile:', error);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No profile found - this is expected for new users
+          console.log('No profile found for user:', userId);
+          setProfile(null);
+        } else {
+          // Unexpected error
+          console.error('Error loading profile:', error);
+          setProfile(null);
+        }
       } else if (data) {
         setProfile(data);
+      } else {
+        // No data returned
+        setProfile(null);
       }
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('Unexpected error loading profile:', error);
+      setProfile(null);
     } finally {
       setLoading(false);
     }

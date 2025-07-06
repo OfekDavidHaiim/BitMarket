@@ -12,11 +12,28 @@ export const useImageUpload = () => {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `${fileName}`;
 
+      // First, check if the bucket exists and create it if it doesn't
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      
+      if (listError) {
+        console.error('Error listing buckets:', listError);
+      }
+
+      const bucketExists = buckets?.some(b => b.name === bucket);
+      
+      if (!bucketExists) {
+        console.error(`Storage bucket '${bucket}' not found. Please create it in your Supabase dashboard.`);
+        throw new Error(`Storage bucket '${bucket}' not found. Please create the bucket in your Supabase dashboard and configure appropriate policies.`);
+      }
+
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(filePath, file);
 
       if (error) {
+        if (error.message.includes('Bucket not found')) {
+          throw new Error(`Storage bucket '${bucket}' not found. Please create the bucket in your Supabase dashboard and configure appropriate policies.`);
+        }
         throw error;
       }
 

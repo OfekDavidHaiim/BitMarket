@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { useImageUpload } from '../hooks/useImageUpload';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ImageUploadProps {
   images: string[];
@@ -17,13 +18,23 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
 }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploading, uploadMultipleImages } = useImageUpload();
+  const { user } = useAuth();
 
   const handleFileSelect = async (files: FileList | null) => {
     if (!files || uploading) return;
 
+    // Check authentication first
+    if (!user) {
+      setUploadError('Please log in to upload images');
+      return;
+    }
+
     setUploadError(null);
+    setUploadSuccess(null);
+    
     const fileArray = Array.from(files);
     const remainingSlots = maxImages - images.length;
     const filesToUpload = fileArray.slice(0, remainingSlots);
@@ -60,6 +71,9 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         
         if (errors.length === 0) {
           setUploadError(null);
+          setUploadSuccess(`Successfully uploaded ${urls.length} image(s)`);
+          // Clear success message after 3 seconds
+          setTimeout(() => setUploadSuccess(null), 3000);
         }
       } else if (errors.length > 0) {
         setUploadError('All uploads failed. Please try again.');
@@ -90,6 +104,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
     const newImages = images.filter((_, i) => i !== index);
     onImagesChange(newImages);
     setUploadError(null);
+    setUploadSuccess(null);
   };
 
   return (
@@ -98,12 +113,32 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         Product Images ({images.length}/{maxImages})
       </label>
       
+      {/* Authentication Warning */}
+      {!user && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start space-x-2">
+          <AlertCircle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm text-yellow-700">Please log in to upload images</p>
+          </div>
+        </div>
+      )}
+      
       {/* Error Display */}
       {uploadError && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
           <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
           <div>
             <p className="text-sm text-red-700">{uploadError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Display */}
+      {uploadSuccess && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-start space-x-2">
+          <CheckCircle className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm text-green-700">{uploadSuccess}</p>
           </div>
         </div>
       )}
@@ -139,11 +174,11 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               isDragging 
                 ? 'border-blue-500 bg-blue-50' 
                 : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
-            } ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            } ${uploading || !user ? 'opacity-50 cursor-not-allowed' : ''}`}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            onClick={() => !uploading && fileInputRef.current?.click()}
+            onClick={() => user && !uploading && fileInputRef.current?.click()}
           >
             {uploading ? (
               <>
@@ -156,7 +191,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
               <>
                 <Upload className="w-8 h-8 text-gray-400 mb-2" />
                 <span className="text-sm text-gray-500 text-center px-2">
-                  Click or drag images
+                  {user ? 'Click or drag images' : 'Login to upload'}
                 </span>
               </>
             )}
@@ -172,7 +207,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         accept="image/*"
         onChange={(e) => handleFileSelect(e.target.files)}
         className="hidden"
-        disabled={uploading}
+        disabled={uploading || !user}
       />
 
       {/* Action Buttons */}
@@ -180,7 +215,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          disabled={images.length >= maxImages || uploading}
+          disabled={images.length >= maxImages || uploading || !user}
           className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {uploading ? (
@@ -188,7 +223,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
           ) : (
             <ImageIcon className="w-4 h-4" />
           )}
-          <span>{uploading ? 'Uploading...' : 'Choose Files'}</span>
+          <span>{uploading ? 'Uploading...' : user ? 'Choose Files' : 'Login Required'}</span>
         </button>
       </div>
 
@@ -199,6 +234,11 @@ const ImageUpload: React.FC<ImageUploadProps> = ({
         {images.length === 0 && (
           <p className="text-sm text-orange-600">
             ⚠️ At least one image is required to create a listing
+          </p>
+        )}
+        {!user && (
+          <p className="text-sm text-red-600">
+            🔒 You must be logged in to upload images
           </p>
         )}
       </div>

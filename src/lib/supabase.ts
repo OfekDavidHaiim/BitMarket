@@ -14,18 +14,47 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'crypto-marketplace'
+    }
   }
 });
 
-// Test connection
-supabase.from('profiles').select('count', { count: 'exact', head: true })
-  .then(({ error }) => {
-    if (error) {
-      console.error('Supabase connection test failed:', error);
+// Test connection and storage access
+const testConnection = async () => {
+  try {
+    // Test database connection
+    const { error: dbError } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
+    if (dbError) {
+      console.error('Database connection test failed:', dbError);
     } else {
-      console.log('Supabase connection successful');
+      console.log('Database connection successful');
     }
-  });
+
+    // Test storage bucket access
+    const { data: buckets, error: storageError } = await supabase.storage.listBuckets();
+    if (storageError) {
+      console.error('Storage access test failed:', storageError);
+    } else {
+      console.log('Storage access successful. Available buckets:', buckets?.map(b => b.name));
+      
+      // Check if product-images bucket exists
+      const productImagesBucket = buckets?.find(b => b.name === 'product-images');
+      if (productImagesBucket) {
+        console.log('Product images bucket found:', productImagesBucket);
+      } else {
+        console.warn('Product images bucket not found. Please create it in Supabase Dashboard.');
+      }
+    }
+  } catch (error) {
+    console.error('Connection test failed:', error);
+  }
+};
+
+// Run connection test
+testConnection();
 
 // Database types
 export interface Profile {

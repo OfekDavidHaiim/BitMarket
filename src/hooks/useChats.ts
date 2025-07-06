@@ -19,34 +19,73 @@ export const useChats = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
+      console.log('Loading chats for user:', user.id);
+
+      // Simplified query to avoid complex joins that might fail
+      const { data: chatsData, error: chatsError } = await supabase
         .from('chats')
-        .select(`
-          *,
-          product:products(*),
-          buyer:profiles(*),
-          seller:profiles(*),
-          messages(
-            *,
-            sender:profiles(*)
-          )
-        `)
+        .select('*')
         .or(`buyer_id.eq.${user.id},seller_id.eq.${user.id}`)
         .order('updated_at', { ascending: false });
 
-      if (error) {
-        throw error;
+      if (chatsError) {
+        throw chatsError;
       }
 
-      // Add last message to each chat
-      const chatsWithLastMessage = (data || []).map(chat => ({
-        ...chat,
-        last_message: chat.messages && chat.messages.length > 0 
-          ? chat.messages[chat.messages.length - 1] 
-          : undefined
-      }));
+      console.log('Chats loaded:', chatsData?.length || 0);
 
-      setChats(chatsWithLastMessage);
+      // Load related data separately to avoid complex join issues
+      const chatsWithData = await Promise.all(
+        (chatsData || []).map(async (chat) => {
+          try {
+            // Load product
+            const { data: product } = await supabase
+              .from('products')
+              .select('*')
+              .eq('id', chat.product_id)
+              .single();
+
+            // Load buyer profile
+            const { data: buyer } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', chat.buyer_id)
+              .single();
+
+            // Load seller profile
+            const { data: seller } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', chat.seller_id)
+              .single();
+
+            // Load last message
+            const { data: lastMessage } = await supabase
+              .from('messages')
+              .select(`
+                *,
+                sender:profiles(*)
+              `)
+              .eq('chat_id', chat.id)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
+
+            return {
+              ...chat,
+              product: product || undefined,
+              buyer: buyer || undefined,
+              seller: seller || undefined,
+              last_message: lastMessage || undefined,
+            };
+          } catch (err) {
+            console.error('Error loading chat data:', err);
+            return chat;
+          }
+        })
+      );
+
+      setChats(chatsWithData);
     } catch (err) {
       console.error('Error loading chats:', err);
       
@@ -76,7 +115,7 @@ export const useChats = () => {
         .eq('product_id', productId)
         .eq('buyer_id', user.id)
         .eq('seller_id', sellerId)
-        .single();
+        .maybeSingle();
 
       if (findError && findError.code !== 'PGRST116') {
         throw findError;

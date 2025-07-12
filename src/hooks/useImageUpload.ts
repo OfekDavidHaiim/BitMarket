@@ -36,24 +36,26 @@ export const useImageUpload = () => {
       console.log('Uploading file:', fileName, 'Size:', file.size, 'Type:', file.type);
       console.log('User authenticated:', !!user, 'Session valid:', !!session?.access_token);
 
-      // First, check if we can access the storage
-      try {
-        const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-        if (bucketsError) {
-          console.error('Cannot access storage buckets:', bucketsError);
-          throw new Error('Storage access denied. Please check your permissions.');
+      // Check storage access with specific error messages
+      const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+      
+      if (bucketsError) {
+        console.error('Storage access error:', bucketsError);
+        if (bucketsError.message.includes('Invalid API key') || bucketsError.message.includes('unauthorized')) {
+          throw new Error('Storage access denied. Please check your Supabase URL/Anon Key or network connection.');
+        } else if (bucketsError.message.includes('Failed to fetch') || bucketsError.message.includes('network')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        } else {
+          throw new Error(`Storage access error: ${bucketsError.message}`);
         }
-        
-        const productBucket = buckets?.find(b => b.name === bucket);
-        if (!productBucket) {
-          throw new Error(`Storage bucket '${bucket}' not found. Please contact support.`);
-        }
-        
-        console.log('Storage bucket found:', productBucket);
-      } catch (storageError) {
-        console.error('Storage check failed:', storageError);
-        throw new Error('Unable to access storage. Please try again or contact support.');
       }
+      
+      const productBucket = buckets?.find(b => b.name === bucket);
+      if (!productBucket) {
+        throw new Error(`Storage bucket '${bucket}' not found. Please create it in Supabase Dashboard.`);
+      }
+      
+      console.log('Storage bucket found:', productBucket);
 
       // Upload to Supabase Storage with explicit options
       const { data, error } = await supabase.storage
@@ -68,17 +70,19 @@ export const useImageUpload = () => {
         
         // Handle specific error cases with user-friendly messages
         if (error.message.includes('row-level security')) {
-          throw new Error('Upload permission denied. Please try logging out and back in.');
+          throw new Error('Upload permission denied. Please ensure RLS policies are configured correctly.');
         } else if (error.message.includes('Bucket not found')) {
-          throw new Error('Storage bucket not configured. Please contact support.');
+          throw new Error('Storage bucket not configured. Please create the product-images bucket in Supabase Dashboard.');
         } else if (error.message.includes('Duplicate')) {
           throw new Error('File already exists. Please try again.');
         } else if (error.message.includes('Unauthorized') || error.message.includes('403')) {
-          throw new Error('Upload not authorized. Please check your login status.');
+          throw new Error('Upload not authorized. Please check your login status and storage policies.');
         } else if (error.message.includes('413') || error.message.includes('too large')) {
           throw new Error('File too large. Please use an image smaller than 10MB.');
         } else if (error.message.includes('415') || error.message.includes('type')) {
           throw new Error('Invalid file type. Please use JPG, PNG, WebP, or GIF.');
+        } else if (error.message.includes('Invalid API key')) {
+          throw new Error('Invalid Supabase configuration. Please check your environment variables.');
         } else {
           throw new Error(`Upload failed: ${error.message}`);
         }
@@ -137,22 +141,39 @@ export const useImageUpload = () => {
     return { urls, errors };
   };
 
-  // Function to check storage permissions
+  // Function to check storage permissions with detailed diagnostics
   const checkStoragePermissions = async () => {
     try {
       if (!user) {
         return { canUpload: false, error: 'Not authenticated' };
       }
 
+      // Test environment variables
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        return { 
+          canUpload: false, 
+          error: 'Missing Supabase environment variables. Please check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env file.' 
+        };
+      }
+
       // Test storage access
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
       if (bucketsError) {
-        return { canUpload: false, error: `Storage access denied: ${bucketsError.message}` };
+        return { 
+          canUpload: false, 
+          error: `Storage access denied: ${bucketsError.message}. Please check your Supabase configuration.` 
+        };
       }
 
       const productBucket = buckets?.find(b => b.name === 'product-images');
       if (!productBucket) {
-        return { canUpload: false, error: 'Product images bucket not found' };
+        return { 
+          canUpload: false, 
+          error: 'Product images bucket not found. Please create a bucket named "product-images" in your Supabase Dashboard.' 
+        };
       }
 
       // Test if we can list files (read permission)
@@ -161,7 +182,10 @@ export const useImageUpload = () => {
         .list('', { limit: 1 });
 
       if (listError) {
-        return { canUpload: false, error: `Storage read test failed: ${listError.message}` };
+        return { 
+          canUpload: false, 
+          error: `Storage read test failed: ${listError.message}. Please check your RLS policies.` 
+        };
       }
 
       return { canUpload: true, error: null };

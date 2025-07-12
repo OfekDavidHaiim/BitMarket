@@ -159,22 +159,32 @@ export const useImageUpload = () => {
         };
       }
 
+      console.log('🔍 Checking storage permissions...');
+      console.log('Environment check passed ✅');
+
       // Test storage access
       const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
       if (bucketsError) {
+        console.error('❌ Storage access error:', bucketsError);
         return { 
           canUpload: false, 
-          error: `Storage access denied: ${bucketsError.message}. Please check your Supabase configuration.` 
+          error: `Storage access denied: ${bucketsError.message}. Please check your Supabase configuration and ensure the migration has been applied.` 
         };
       }
 
+      console.log('📦 Available buckets:', buckets?.map(b => b.name));
+
       const productBucket = buckets?.find(b => b.name === 'product-images');
       if (!productBucket) {
+        console.error('❌ Product images bucket not found');
+        console.log('Available buckets:', buckets?.map(b => b.name) || 'None');
         return { 
           canUpload: false, 
-          error: 'Product images bucket not found. Please create a bucket named "product-images" in your Supabase Dashboard.' 
+          error: 'Product images bucket not found. The migration may not have run successfully. Please check your Supabase Dashboard or run the migration manually.' 
         };
       }
+
+      console.log('✅ Product images bucket found:', productBucket);
 
       // Test if we can list files (read permission)
       const { error: listError } = await supabase.storage
@@ -182,14 +192,17 @@ export const useImageUpload = () => {
         .list('', { limit: 1 });
 
       if (listError) {
+        console.error('❌ Storage read test failed:', listError);
         return { 
           canUpload: false, 
           error: `Storage read test failed: ${listError.message}. Please check your RLS policies.` 
         };
       }
 
+      console.log('✅ Storage permissions check passed');
       return { canUpload: true, error: null };
     } catch (error) {
+      console.error('❌ Storage permission check failed:', error);
       return { 
         canUpload: false, 
         error: error instanceof Error ? error.message : 'Storage permission check failed' 

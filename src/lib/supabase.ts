@@ -4,7 +4,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables');
+  console.error('❌ Missing Supabase environment variables');
   console.error('VITE_SUPABASE_URL:', supabaseUrl ? 'Set' : 'Missing');
   console.error('VITE_SUPABASE_ANON_KEY:', supabaseAnonKey ? 'Set' : 'Missing');
 }
@@ -22,89 +22,33 @@ export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
   }
 });
 
-// Enhanced connection and storage testing
+// Quick connection test with timeout
 const testConnection = async () => {
   try {
     console.log('🔍 Testing Supabase connection...');
     
-    // Test database connection
-    const { error: dbError } = await supabase.from('profiles').select('count', { count: 'exact', head: true });
+    // Set a 3-second timeout for connection test
+    const connectionPromise = supabase.from('profiles').select('count', { count: 'exact', head: true });
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Connection timeout')), 3000);
+    });
+
+    const { error: dbError } = await Promise.race([
+      connectionPromise,
+      timeoutPromise
+    ]) as any;
+
     if (dbError) {
-      console.error('❌ Database connection test failed:', dbError);
+      console.error('❌ Database connection test failed:', dbError.message);
     } else {
       console.log('✅ Database connection successful');
     }
-
-    // Test storage bucket access
-    const { data: buckets, error: storageError } = await supabase.storage.listBuckets();
-    if (storageError) {
-      console.error('❌ Storage access test failed:', storageError);
-    } else {
-      console.log('✅ Storage access successful. Available buckets:', buckets?.map(b => b.name));
-      
-      // Check if product-images bucket exists
-      const productImagesBucket = buckets?.find(b => b.name === 'product-images');
-      if (productImagesBucket) {
-        console.log('✅ Product images bucket found:', {
-          name: productImagesBucket.name,
-          public: productImagesBucket.public,
-          fileSizeLimit: productImagesBucket.file_size_limit,
-          allowedMimeTypes: productImagesBucket.allowed_mime_types
-        });
-
-        // Test storage policies by trying to list files
-        const { data: files, error: listError } = await supabase.storage
-          .from('product-images')
-          .list('', { limit: 1 });
-
-        if (listError) {
-          console.warn('⚠️ Storage list test failed (may be normal for empty bucket):', listError.message);
-        } else {
-          console.log('✅ Storage list test successful. Files found:', files?.length || 0);
-        }
-      } else {
-        console.warn('⚠️ Product images bucket not found. Please create it in Supabase Dashboard.');
-        console.log('📋 To create the bucket:');
-        console.log('   1. Go to Supabase Dashboard > Storage');
-        console.log('   2. Create new bucket named "product-images"');
-        console.log('   3. Set as Public bucket');
-        console.log('   4. Set file size limit to 10MB');
-        console.log('   5. Set allowed MIME types: image/jpeg, image/png, image/webp, image/gif');
-      }
-    }
-
-    // Test storage permissions if user is authenticated
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      console.log('🔐 User authenticated, testing storage permissions...');
-      
-      try {
-        // Test if we can check storage permissions
-        const { data: permissionCheck, error: permError } = await supabase
-          .rpc('check_storage_permissions');
-        
-        if (permError) {
-          console.warn('⚠️ Storage permission check function not available:', permError.message);
-        } else if (permissionCheck && permissionCheck.length > 0) {
-          const perms = permissionCheck[0];
-          console.log('📊 Storage permissions:', {
-            canUpload: perms.can_upload,
-            canRead: perms.can_read,
-            bucketExists: perms.bucket_exists,
-            errorMessage: perms.error_message
-          });
-        }
-      } catch (error) {
-        console.log('ℹ️ Storage permission check not available (normal for new setups)');
-      }
-    }
-
   } catch (error) {
-    console.error('❌ Connection test failed:', error);
+    console.error('❌ Connection test failed:', error instanceof Error ? error.message : 'Unknown error');
   }
 };
 
-// Run connection test
+// Run connection test but don't block app loading
 testConnection();
 
 // Database types

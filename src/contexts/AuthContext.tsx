@@ -35,32 +35,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
 
-    // Get initial session
+    // Set a maximum loading time of 10 seconds
+    const maxLoadingTimeout = setTimeout(() => {
+      if (mounted) {
+        console.warn('Auth loading timeout reached, setting loading to false');
+        setLoading(false);
+      }
+    }, 10000);
+
     const getInitialSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('🔍 Getting initial session...');
         
+        // Set a timeout for the session request
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Session request timeout')), 5000);
+        });
+
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any;
+
+        clearTimeout(timeoutId);
+
         if (error) {
-          console.error('Error getting session:', error);
+          console.error('❌ Error getting session:', error);
           if (mounted) {
             setLoading(false);
           }
           return;
         }
 
+        console.log('✅ Session retrieved:', session ? 'Found' : 'None');
+
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
+            console.log('👤 Loading profile for user:', session.user.id);
             await loadProfile(session.user.id);
           } else {
+            console.log('👤 No user session, skipping profile load');
             setLoading(false);
           }
         }
       } catch (error) {
-        console.error('Error in getInitialSession:', error);
+        console.error('❌ Error in getInitialSession:', error);
         if (mounted) {
           setLoading(false);
         }
@@ -71,7 +96,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
+      console.log('🔄 Auth state changed:', event, session?.user?.id);
       
       if (mounted) {
         setSession(session);
@@ -88,34 +113,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => {
       mounted = false;
+      clearTimeout(maxLoadingTimeout);
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
 
   const loadProfile = async (userId: string) => {
     try {
-      console.log('Loading profile for user:', userId);
+      console.log('📋 Loading profile for user:', userId);
       
-      // Use select with maybeSingle to handle missing profiles gracefully
-      const { data, error } = await supabase
+      // Set a timeout for profile loading
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error loading profile:', error);
-        // Don't throw error for missing profile, just log it
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile load timeout')), 3000);
+      });
+
+      const { data, error } = await Promise.race([
+        profilePromise,
+        timeoutPromise
+      ]) as any;
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error loading profile:', error);
+        // Don't throw error, just continue without profile
       } else if (data) {
-        console.log('Profile loaded:', data);
+        console.log('✅ Profile loaded:', data.name);
         setProfile(data);
       } else {
-        console.log('No profile found for user:', userId);
-        // Profile doesn't exist yet, this is normal for new users
+        console.log('ℹ️ No profile found for user:', userId);
         setProfile(null);
       }
     } catch (error) {
-      console.error('Error in loadProfile:', error);
+      console.error('❌ Error in loadProfile:', error);
+      // Don't throw error, just continue without profile
     } finally {
       setLoading(false);
     }

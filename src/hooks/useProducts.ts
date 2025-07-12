@@ -11,7 +11,10 @@ export const useProducts = () => {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
+      console.log('📦 Loading products...');
+
+      // Set a timeout for the products query
+      const productsPromise = supabase
         .from('products')
         .select(`
           *,
@@ -21,14 +24,28 @@ export const useProducts = () => {
         .order('is_sponsored', { ascending: false })
         .order('created_at', { ascending: false });
 
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Products load timeout')), 5000);
+      });
+
+      const { data, error } = await Promise.race([
+        productsPromise,
+        timeoutPromise
+      ]) as any;
+
       if (error) {
         throw error;
       }
 
+      console.log('✅ Products loaded:', data?.length || 0);
       setProducts(data || []);
     } catch (err) {
-      console.error('Error loading products:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load products');
+      console.error('❌ Error loading products:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load products';
+      setError(errorMessage);
+      
+      // Set empty products array on error to prevent infinite loading
+      setProducts([]);
     } finally {
       setLoading(false);
     }

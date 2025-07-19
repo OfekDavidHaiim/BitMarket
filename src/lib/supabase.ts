@@ -19,6 +19,40 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.error('');
 }
 
+// Custom fetch function with better error handling for WebContainer environment
+const customFetch = async (url: string, options: any = {}) => {
+  try {
+    // Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    console.error('🌐 Network request failed:', error);
+    
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout - please check your internet connection');
+      }
+      if (error.message.includes('Failed to fetch')) {
+        throw new Error('Network connection failed - please check your internet connection and Supabase URL');
+      }
+    }
+    
+    throw error;
+  }
+};
+
 // Only create client if we have valid environment variables
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co', 
@@ -30,10 +64,11 @@ export const supabase = createClient(
     detectSessionInUrl: true
   },
   global: {
+    fetch: customFetch,
     headers: {
       'X-Client-Info': 'crypto-marketplace'
     }
-  }
+  },
 });
 
 // Connection test with better error handling
@@ -47,21 +82,16 @@ const testConnection = async () => {
   try {
     console.log('🔍 Testing Supabase connection...');
     
-    // Set a 5-second timeout for connection test
-    const connectionPromise = supabase.from('profiles').select('count', { count: 'exact', head: true });
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timeout after 5 seconds')), 5000);
-    });
-
-    const { error: dbError } = await Promise.race([
-      connectionPromise,
-      timeoutPromise
-    ]) as any;
+    // Simple connection test with timeout
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .select('count', { count: 'exact', head: true });
 
     if (dbError) {
-      if (dbError.message.includes('Failed to fetch')) {
+      if (dbError.message.includes('Failed to fetch') || dbError.message.includes('Network')) {
         console.error('❌ Network connection failed - check your Supabase URL and internet connection');
         console.error('Current URL:', supabaseUrl);
+        console.error('💡 This might be a temporary network issue. Try refreshing the page.');
       } else {
         console.error('❌ Database connection test failed:', dbError.message);
       }
@@ -70,12 +100,13 @@ const testConnection = async () => {
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    if (errorMessage.includes('Failed to fetch')) {
+    if (errorMessage.includes('Failed to fetch') || errorMessage.includes('Network') || errorMessage.includes('timeout')) {
       console.error('❌ Network error: Cannot reach Supabase servers');
       console.error('🔧 Check:');
       console.error('  - Your internet connection');
       console.error('  - Your Supabase URL is correct');
       console.error('  - Your Supabase project is active');
+      console.error('  - Try refreshing the page');
     } else {
       console.error('❌ Connection test failed:', errorMessage);
     }

@@ -54,6 +54,12 @@ function App() {
                 Try refreshing the page
               </button>
             </p>
+            <button 
+              onClick={() => window.location.reload()} 
+              className="mt-2 text-red-800 underline hover:no-underline text-sm"
+            >
+              Refresh after fixing
+            </button>
           </div>
         </div>
       </div>
@@ -79,6 +85,9 @@ function App() {
           )}
         </Routes>
       </main>
+          <p className="text-xs text-yellow-700 mt-2">
+            If you're seeing "Failed to fetch" errors, this might be a temporary network issue.
+          </p>
     </div>
   );
 }

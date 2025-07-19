@@ -22,8 +22,7 @@ export const useProducts = () => {
 
       console.log('📦 Loading products...');
 
-      // Set a 10-second timeout for the products query
-      const productsPromise = supabase
+      const { data, error } = await supabase
         .from('products')
         .select(`
           *,
@@ -33,16 +32,8 @@ export const useProducts = () => {
         .order('is_sponsored', { ascending: false })
         .order('created_at', { ascending: false });
 
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Products load timeout after 10 seconds')), 10000);
-      });
-
-      const { data, error } = await Promise.race([
-        productsPromise,
-        timeoutPromise
-      ]) as any;
-
       if (error) {
+        console.error('❌ Database error loading products:', error);
         throw error;
       }
 
@@ -53,8 +44,8 @@ export const useProducts = () => {
       let errorMessage = 'Failed to load products';
       
       if (err instanceof Error) {
-        if (err.message.includes('Failed to fetch')) {
-          errorMessage = 'Network error: Cannot connect to database. Please check your internet connection and try again.';
+        if (err.message.includes('Failed to fetch') || err.message.includes('Network') || err.message.includes('timeout')) {
+          errorMessage = 'Network error: Cannot connect to database. Please check your internet connection and try refreshing the page.';
         } else {
           errorMessage = err.message;
         }

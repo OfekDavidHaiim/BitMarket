@@ -204,23 +204,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       
+      console.log('🔐 Attempting to sign in...');
+      
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        if (error.message.includes('Failed to fetch')) {
-          return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection.' };
+        console.error('❌ Sign in error:', error);
+        
+        if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+          return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection and try again.' };
+        }
+        if (error.message.includes('Invalid login credentials')) {
+          return { error: 'Invalid email or password. Please check your credentials and try again.' };
         }
         return { error: error.message };
       }
 
+      console.log('✅ Sign in successful');
       return {};
     } catch (error) {
       console.error('Signin error:', error);
-      if (error instanceof Error && error.message.includes('Failed to fetch')) {
-        return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection.' };
+      if (error instanceof Error && (error.message.includes('Failed to fetch') || error.message.includes('Network') || error.message.includes('timeout'))) {
+        return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection and try again.' };
       }
       return { error: 'An unexpected error occurred' };
     } finally {

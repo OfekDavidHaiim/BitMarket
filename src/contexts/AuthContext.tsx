@@ -196,6 +196,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const signIn = async (email: string, password: string) => {
+    // Check if Supabase is properly configured
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      return { error: 'Authentication service not configured. Please check environment variables.' };
+    }
+
     try {
       setLoading(true);
       
@@ -205,12 +210,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (error) {
+        if (error.message.includes('Failed to fetch')) {
+          return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection.' };
+        }
         return { error: error.message };
       }
 
       return {};
     } catch (error) {
       console.error('Signin error:', error);
+      if (error instanceof Error && error.message.includes('Failed to fetch')) {
+        return { error: 'Network error: Cannot connect to authentication service. Please check your internet connection.' };
+      }
       return { error: 'An unexpected error occurred' };
     } finally {
       setLoading(false);

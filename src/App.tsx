@@ -19,7 +19,18 @@ function App() {
         <div className="text-center max-w-md mx-auto p-8">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Loading CryptoMarket...</h2>
-          <p className="text-gray-600 mb-4">Setting up your marketplace experience</p>
+          <p className="text-gray-600">
+            {!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY 
+              ? 'Checking configuration...' 
+              : 'Connecting to database...'}
+          </p>
+          {(!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+              <p className="text-red-700 text-sm">
+                ⚠️ Missing environment variables. Please check your .env file.
+              </p>
+            </div>
+          )}
           
           {/* Progress indicator */}
           <div className="w-full bg-gray-200 rounded-full h-2 mb-4">

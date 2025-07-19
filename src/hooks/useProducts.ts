@@ -7,13 +7,22 @@ export const useProducts = () => {
   const [error, setError] = useState<string | null>(null);
 
   const loadProducts = async () => {
+    // Check if Supabase is properly configured
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      console.error('❌ Cannot load products: Supabase not configured');
+      setError('Database not configured. Please check environment variables.');
+      setLoading(false);
+      setProducts([]);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
       console.log('📦 Loading products...');
 
-      // Set a timeout for the products query
+      // Set a 10-second timeout for the products query
       const productsPromise = supabase
         .from('products')
         .select(`
@@ -25,7 +34,7 @@ export const useProducts = () => {
         .order('created_at', { ascending: false });
 
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Products load timeout')), 5000);
+        setTimeout(() => reject(new Error('Products load timeout after 10 seconds')), 10000);
       });
 
       const { data, error } = await Promise.race([
@@ -41,7 +50,15 @@ export const useProducts = () => {
       setProducts(data || []);
     } catch (err) {
       console.error('❌ Error loading products:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load products';
+      let errorMessage = 'Failed to load products';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to fetch')) {
+          errorMessage = 'Network error: Cannot connect to database. Please check your internet connection and try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
       setError(errorMessage);
       
       // Set empty products array on error to prevent infinite loading

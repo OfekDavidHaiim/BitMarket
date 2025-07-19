@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Set a timeout for the session request
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => reject(new Error('Session request timeout')), 5000);
+          timeoutId = setTimeout(() => reject(new Error('Session request timeout')), 15000);
         });
 
         const { data: { session }, error } = await Promise.race([
@@ -131,7 +131,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         .maybeSingle();
 
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Profile load timeout')), 3000);
+        setTimeout(() => reject(new Error('Profile load timeout')), 10000);
       });
 
       const { data, error } = await Promise.race([
